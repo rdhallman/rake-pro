@@ -91,9 +91,9 @@ module Rake
         load_paths = parts.reduce([
             rpath(root, 'cfg.yml'),
             rpath(root, '.cfg.yml'),
-            rpath(root, 'cfg-private.yml')
-            rpath(root, '.cfg-private.yml')
-            rpath(root, 'cfg-local.yml')
+            rpath(root, 'cfg-private.yml'),
+            rpath(root, '.cfg-private.yml'),
+            rpath(root, 'cfg-local.yml'),
             rpath(root, '.cfg-local.yml')
           ]) { |paths, folder|
           paths.push(rpath(root, folder, 'cfg.yml'))

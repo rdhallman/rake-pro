@@ -13,6 +13,7 @@ module Rake
       def initialize
         @cfg_files = []
         @kvp_stack = []
+        @scopes = []
         @kvp = {}
       end
 
@@ -37,7 +38,7 @@ module Rake
       end
 
       def push_scope scope
-        (@scopes ||= []).push(scope)
+        @scopes.push(scope)
       end
 
       def pop_scope

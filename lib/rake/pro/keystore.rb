@@ -270,3 +270,12 @@ end
 Rake::Task.class_eval do
   prepend Rake::TaskOverrides
 end
+
+def require_tasks rakefile
+  rakepaths = Gem.find_latest_files("**/#{rakefile}")
+  if rakepaths.length > 1
+    puts "Warning! Required rake tasks found at multiple paths.  Using first of:"
+    puts rakepaths.inspect
+  end
+  load rakepaths.first
+end

@@ -160,7 +160,6 @@ module Rake
     end
 
     def invoke_task *args
-      puts "trying #{args.inspect}"
       task_name, pruned = (Rake.application.context ||= context_factory).before_invoke(parse_task_string args.first)
       if Rake::Task.task_defined?(task_name) || !pruned
         Rake.application.active_task = task_name

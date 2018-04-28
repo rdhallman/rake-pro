@@ -1,4 +1,7 @@
-class Hash
+require "hashie"
+
+class KeyStore < Hashie::Mash
+
   def recursive_merge(new_hash)
     self.merge(new_hash) do |k, old_val, new_val|
       if new_val.respond_to?(:blank) && new_val.blank?
@@ -34,7 +37,7 @@ class Hash
   end
 
   def symbolize_keys
-    inject({}) { |memo,(k,v)| 
+    inject(KeyStore.new) { |memo,(k,v)| 
       memo[k.to_sym] = v.is_a?(Hash) ? v.symbolize_keys : v;
       memo
     }
@@ -82,7 +85,7 @@ class Hash
 
   def promote_key pk
     pk = pk.to_sym
-    coh = {}
+    coh = KeyStore.new
     promoted = false
     self.each_pair { |k, v|
       scopes, subkey = key_details(k)
@@ -109,7 +112,7 @@ class Hash
   end
 
   def prune_keys pks
-    coh = {}
+    coh = KeyStore.new
     self.each_pair { |k, v|
       scopes, subkey = key_details(k)
       prune = false
@@ -120,7 +123,7 @@ class Hash
             if (subkey.nil?)
               coh[scope] = v
             else
-              coh[scope] = {}
+              coh[scope] = KeyStore.new
               coh[scope][subkey] = v
             end
           end
@@ -130,6 +133,13 @@ class Hash
       end
     }
     coh
+  end
+
+
+  def [](key)
+    self.fetch(key) {
+      raise "Key '#{key}' is missing from Rake Application Key Store"
+    }
   end
 
 end

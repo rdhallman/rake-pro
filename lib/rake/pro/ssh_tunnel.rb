@@ -83,15 +83,17 @@ module Rake
     class << self
       def tunnel
           host = gateway = port = jump = nil
-          cfg = Rake.application.cfg.values
+          cfg = Rake.application.context.values
           if cfg.has_key?(:jumpbox)
             jump = cfg[:jumpbox]
-            gateway = Net::SSH::Gateway.new(
-              jump[:host], jump[:user],
-              :keys => [jump[:keyfile]] #, :verbose => :debug
-            )
             host = "127.0.0.1"
-            port = gateway.open(cfg[:host], cfg[:port], jump[:port])
+            if !Rake.application.disconnected
+              gateway = Net::SSH::Gateway.new(
+                jump[:host], jump[:user],
+                :keys => [jump[:keyfile]] #, :verbose => :debug
+              )
+              port = gateway.open(cfg[:host], cfg[:port], jump[:port])
+            end
           else 
             host = cfg[:host]
             port = cfg[:port]

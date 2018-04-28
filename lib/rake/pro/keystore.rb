@@ -5,20 +5,29 @@ require_relative './hashex'
 
 module Rake
   class Application
-    attr_accessor :cfg
+    attr_accessor :context
     attr_accessor :scopes
+    attr_accessor :context
+    attr_accessor :context_class
     attr_accessor :active_dir
+    attr_accessor :active_task
+    attr_accessor :current_task
+    attr_accessor :dependent_tasks
+    attr_accessor :disconnected
+    attr_accessor :reverse
 
-    class KeySpace
+    class Context
       def initialize
         @cfg_files = []
         @kvp_stack = []
         @scopes = []
-        @kvp = {}
+        @kvp = KeyStore.new
       end
 
       def [](key)
-        @kvp[key]
+        @kvp.fetch(key) {
+          raise "Key '#{key}' is missing from toplevel application context"
+        }
       end
 
       def values()
@@ -47,7 +56,7 @@ module Rake
 
       def push_cfg cfg_file
         #puts "Loading cfg file:  #{cfg_file}..."
-        cfg = YAML.load_file(cfg_file).symbolize_keys
+        cfg = KeyStore.load(cfg_file)
         source = if (cfg.has_key?(:default))
                     cfg[:default]
                   elsif (cfg.has_key?(:source))
@@ -89,21 +98,22 @@ module Rake
         parts = task_name.split(':')
         push_scope(parts[0].to_sym) if parts.length == 1
 
-        load_paths = parts.reduce([
+        load_paths = [*0..parts.length-1].reduce([
             rpath(root, 'cfg.yml'),
             rpath(root, '.cfg.yml'),
             rpath(root, 'cfg-private.yml'),
             rpath(root, '.cfg-private.yml'),
             rpath(root, 'cfg-local.yml'),
             rpath(root, '.cfg-local.yml')
-          ]) { |paths, folder|
-          paths.push(rpath(root, folder, 'cfg.yml'))
-          paths.push(rpath(root, folder, '.cfg.yml'))
-          paths.push(rpath(root, folder, 'cfg-private.yml'))
-          paths.push(rpath(root, folder, '.cfg-private.yml'))
-          paths.push(rpath(root, folder, 'cfg-local.yml'))
-          paths.push(rpath(root, folder, '.cfg-local.yml'))
-          paths
+          ]) { |paths, index|
+            folder = File.join(parts[0..index])
+            paths.push(rpath(root, folder, 'cfg.yml'))
+            paths.push(rpath(root, folder, '.cfg.yml'))
+            paths.push(rpath(root, folder, 'cfg-private.yml'))
+            paths.push(rpath(root, folder, '.cfg-private.yml'))
+            paths.push(rpath(root, folder, 'cfg-local.yml'))
+            paths.push(rpath(root, folder, '.cfg-local.yml'))
+            paths
         }
         load_paths.push(rpath(home, '.cyborg.yml'))
 
@@ -125,7 +135,7 @@ module Rake
         }
 
         # merge the kvp stack entries into a single map
-        @kvp = pruned_stack.reduce({}) { |acc, kvp|
+        @kvp = pruned_stack.reduce(KeyStore.new) { |acc, kvp|
           acc.recursive_merge(kvp)
         }
 

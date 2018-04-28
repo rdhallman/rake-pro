@@ -1,7 +1,8 @@
 require "rake/pro/version"
-require "rake/pro/hashex"
+require "rake/pro/key_store"
+require "rake/pro/localsh"
 require "rake/pro/ssh_tunnel"
-require "rake/pro/keystore"
+require "rake/pro/context"
 require "rake/pro/migration"
 
 module Rake

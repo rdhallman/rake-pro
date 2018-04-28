@@ -1,7 +1,6 @@
 require 'rake'
 require 'yaml'
 require 'etc'
-require_relative './hashex'
 
 module Rake
   class Application

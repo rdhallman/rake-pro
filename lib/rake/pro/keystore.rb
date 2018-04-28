@@ -154,16 +154,119 @@ module Rake
     end
   end
 
-  module Intercept
-    def invoke_task *args
-      task_name, pruned = (Rake.application.cfg ||= Application::KeySpace.new).before_invoke(parse_task_string args.first)
-      super if Rake::Task.task_defined?(task_name) || !pruned
-      Rake.application.cfg.after_invoke(parse_task_string args.first)
+  module ApplicationOverrides
+
+    def context_factory
+      Rake.application.context_class.nil? ? Application::Context.new : Rake.application.context_class.new
     end
+
+    def invoke_task *args
+      puts "trying #{args.inspect}"
+      task_name, pruned = (Rake.application.context ||= context_factory).before_invoke(parse_task_string args.first)
+      if Rake::Task.task_defined?(task_name) || !pruned
+        Rake.application.active_task = task_name
+        super
+      end
+      Rake.application.context.after_invoke(parse_task_string args.first)
+    end
+
+    # Display the tasks and comments.
+    def display_tasks_and_comments # :nodoc:
+      displayable_tasks = tasks.select { |t|
+        (options.show_all_tasks || t.comment) &&
+          t.name =~ options.show_task_pattern
+      }
+      case options.show_tasks
+      when :tasks
+        width = displayable_tasks.map { |t| t.name_with_args.length }.max || 10
+        if truncate_output?
+          max_column = terminal_width - name.size - width - 7
+        else
+          max_column = nil
+        end
+
+        displayable_tasks.each do |t|
+          if top_level_tasks.length == 1 && top_level_tasks.first == 'default'
+            match = true
+          else
+            match = false
+            top_level_tasks.each { |ns| 
+              match = t.name.start_with?("#{ns}:")
+            }
+          end
+          next if !match
+          printf("#{name} %-#{width}s  # %s\n",
+            t.name_with_args,
+            max_column ? truncate(t.comment, max_column) : t.comment)
+        end
+      when :describe
+        displayable_tasks.each do |t|
+          puts "#{name} #{t.name_with_args}"
+          comment = t.full_comment || ""
+          comment.split("\n").each do |line|
+            puts "    #{line}"
+          end
+          puts
+        end
+      when :lines
+        displayable_tasks.each do |t|
+          t.locations.each do |loc|
+            printf "#{name} %-30s %s\n", t.name_with_args, loc
+          end
+        end
+      else
+        fail "Unknown show task mode: '#{options.show_tasks}'"
+      end
+    end
+
   end
 
+  module TaskOverrides
+    class AbortNormally < Exception
+    end
+
+    def invoke_prerequisites(task_args, invocation_chain)
+      (Rake.application.dependent_tasks ||= []).push(@name)
+      super
+      Rake.application.dependent_tasks.pop
+    end
+
+    def execute(args=nil)
+      Rake.application.current_task = @name  
+      super
+    end
+
+    def invoke_with_call_chain(task_args, invocation_chain) # :nodoc:
+      Rake.application.active_task = name
+      new_chain = InvocationChain.append(self, invocation_chain)
+      @lock.synchronize do
+        if application.options.trace
+          application.trace "** Invoke #{name} #{format_trace_flags}"
+        end
+        return if @already_invoked
+        @already_invoked = true
+        begin
+          if Rake.application.reverse
+            execute(task_args) if needed?
+            invoke_prerequisites(task_args, new_chain)
+          else
+            invoke_prerequisites(task_args, new_chain)
+            execute(task_args) if needed?
+          end
+        rescue AbortNormally => ex
+        end
+      end
+    rescue Exception => ex
+      add_chain_to(ex, new_chain)
+      raise ex
+    end
+  end
 end
 
 Rake::Application.class_eval do
-  prepend Rake::Intercept
+  prepend Rake::ApplicationOverrides
+end
+
+Rake::Task.class_eval do
+  prepend Rake::TaskOverrides
 end

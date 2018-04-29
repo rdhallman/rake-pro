@@ -5,7 +5,7 @@ module Rake
     
   class SSH
     class << self
-      def tunnel
+      def tunnel(local_shell_allowed = false)
           host = gateway = port = jump = nil
           cfg = Rake.application.context.values
           if cfg.has_key?(:jumpbox)
@@ -18,9 +18,11 @@ module Rake
               )
               port = gateway.open(cfg[:host], cfg[:port], jump[:port])
             end
-          else 
+          elsif cfg.has_key?(:host) 
             host = cfg[:host]
             port = cfg[:port]
+          elsif !local_shell_allowed
+            raise RakeTaskError.new("Remote shell requested, but no remote host was configured.")
           end
           local = Rake::Local.new
           yield(local, host, port) if block_given?

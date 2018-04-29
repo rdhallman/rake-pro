@@ -20,7 +20,7 @@ module Rake
       def initialize
         @cfg_files = []
         @kvp_stack = []
-        @scopes = []
+        @active_scopes = []
         @kvp = KeyStore.new
       end
 
@@ -46,16 +46,21 @@ module Rake
         return File.join(paths)
       end
 
+      def active_scopes
+        @active_scopes
+      end
+
       def push_scope scope
-        @scopes.push(scope)
+        puts "Promoting scope '#{scope}'." if Rake.verbose?
+        @active_scopes.push(scope)
       end
 
       def pop_scope
-        @scopes.pop
+        @active_scopes.pop
       end
 
       def push_cfg cfg_file
-        #puts "Loading cfg file:  #{cfg_file}..."
+        puts "Loading configuration file: #{cfg_file}" if Rake.verbose?
         cfg = KeyStore.load(cfg_file)
         source = if (cfg.has_key?(:default))
                     cfg[:default]
@@ -122,14 +127,15 @@ module Rake
         }
 
         # promote and prune the key space
-        pruned = false
+        promoted = false
         pruned_stack = []
-        @kvp_stack.each_with_index { |kvp, index| 
-          @scopes.each_with_index { |scope, i2|
-            kvp, didprune = kvp.promote_key(scope)
+        @kvp_stack.each { |kvp| 
+          @active_scopes.each { |scope|
+            kvp, didpromote = kvp.promote_key(scope)
+
             siblings = scope_siblings(scope)
-            kvp = kvp.prune_keys(scope_siblings(scope)) if siblings
-            pruned |= (didprune && scope == task_name.to_sym)
+            kvp = kvp.prune_keys(siblings) if siblings
+            promoted |= didpromote && scope == task_name.to_sym
           }
           pruned_stack.push(kvp)
         }
@@ -139,7 +145,7 @@ module Rake
           acc.recursive_merge(kvp)
         }
 
-        [task_name, pruned]
+        [task_name, promoted]
       end
 
       def after_invoke task_details
@@ -236,6 +242,9 @@ module Rake
       Rake.application.executing_task = true
       super
       Rake.application.executing_task = false
+    rescue => ex
+      puts "Error:\n => #{ex.message}"
+      puts "Backtrace:\n\t#{ex.backtrace.join("\n\t")}" if Rake.verbose?
     end
 
 

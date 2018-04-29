@@ -14,6 +14,7 @@ module Rake
     attr_accessor :dependent_tasks
     attr_accessor :disconnected
     attr_accessor :reverse
+    attr_accessor :executing_task
 
     class Context
       def initialize
@@ -229,10 +230,14 @@ module Rake
       Rake.application.dependent_tasks.pop
     end
 
+
     def execute(args=nil)
       Rake.application.current_task = @name  
+      Rake.application.executing_task = true
       super
+      Rake.application.executing_task = false
     end
+
 
     def invoke_with_call_chain(task_args, invocation_chain) # :nodoc:
       Rake.application.active_task = name

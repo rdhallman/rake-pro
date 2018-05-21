@@ -4,6 +4,8 @@ require 'etc'
 
 module Rake
   class Application
+    include MigrationManager
+
     attr_accessor :context
     attr_accessor :scopes
     attr_accessor :context
@@ -158,7 +160,13 @@ module Rake
       end
 
     end
+
+    def migration_manager
+      db = init_migration_manager
+      yield(self, db) if block_given?
+    end
   end
+
 
   module ApplicationOverrides
 
@@ -230,17 +238,43 @@ module Rake
     class AbortNormally < Exception
     end
 
+    def flag_as_migration
+      @isa_migration = true
+    end
+
     def invoke_prerequisites(task_args, invocation_chain)
       (Rake.application.dependent_tasks ||= []).push(@name)
       super
       Rake.application.dependent_tasks.pop
     end
 
+    def up
+      puts "Calling up!"
+=begin
+      if @direction == :up && block_given?
+        begin
+            yield @db
+            puts "done with migration.  Inserting..."
+            @db.run "INSERT INTO public.testmitbl VALUES ('#{@mip.name}', '#{Time.now}', '#{@mip.full_comment}', 'applied', '#{whoami} as #{@dbuser}', '#{@mip.prerequisites.join(', ')}')"
+        rescue => ex
+            puts "EXCEPTION! #{ex}"
+        end
+=end
+    end
+
+    def down
+      puts "Calling down!"
+    end
 
     def execute(args=nil)
       Rake.application.current_task = @name  
       Rake.application.executing_task = true
-      super
+      Rake.application.task_in_progress = self
+      if (@isa_migration)
+        Rake.application.init_migration_manager
+      else
+        super
+      end
       Rake.application.executing_task = false
     rescue => ex
       puts "Error:\n => #{ex.message}"

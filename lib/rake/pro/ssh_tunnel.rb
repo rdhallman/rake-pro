@@ -5,7 +5,7 @@ module Rake
     
   class SSH
     class << self
-      def tunnel(local_shell_allowed = false)
+      def open_tunnel(local_shell_allowed = false)
           host = gateway = port = jump = nil
           cfg = Rake.application.context.values
           if cfg.has_key?(:jumpbox)
@@ -24,13 +24,19 @@ module Rake
           elsif !local_shell_allowed
             raise RakeTaskError.new("Remote shell requested, but no remote host was configured.")
           end
-          local = Rake::Local.new
-          yield(local, host, port) if block_given?
+          [gateway, host, port]
       rescue Net::SSH::AuthenticationFailed => ex
           puts "\nError: SSH Failed to Authenticate. You may need to run\n   $ ssh-add ~/.ssh/#{jump[:keyfile]}  # key file\n     ** or add this line to your .bashrc.\n\n"
+      end
+
+      def tunnel(local_shell_allowed = false)
+          gateway, host, port = open_tunnel(local_shell_allowed)
+          local = Rake::Local
+          yield(local, host, port) if block_given?
       ensure
           gateway.close(port) unless gateway.nil?
       end
+
     end
   end
 

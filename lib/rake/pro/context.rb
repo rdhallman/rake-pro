@@ -167,6 +167,7 @@ module Rake
       db = init_migration_manager
       yield(self, db) if block_given?
     end
+
   end
 
 
@@ -235,6 +236,10 @@ module Rake
       end
     end
 
+    def top_level
+      super
+      finalize_migrations
+    end
   end
 
   module TaskOverrides
@@ -251,22 +256,54 @@ module Rake
       Rake.application.dependent_tasks.pop
     end
 
-    def up
-      puts "Calling up!"
-=begin
-      if @direction == :up && block_given?
-        begin
-            yield @db
-            puts "done with migration.  Inserting..."
-            @db.run "INSERT INTO public.testmitbl VALUES ('#{@mip.name}', '#{Time.now}', '#{@mip.full_comment}', 'applied', '#{whoami} as #{@dbuser}', '#{@mip.prerequisites.join(', ')}')"
-        rescue => ex
-            puts "EXCEPTION! #{ex}"
+    def up(&block)
+      Rake.migration_manager do |mgr, db|
+        if mgr.migrating_up?
+          if block_given?
+            begin
+                if block.parameters.length == 0
+                  # block is not receiving the DB argument.  So, expect a SQL string
+                  # to be returned that we will run
+                  sql = yield db
+                  db.run sql
+                else
+                  yield db
+                end
+                mgr.record_success(self)
+            rescue => ex
+                mgr.record_failure(self)
+                raise RakeTaskError.new("Failed to apply migration '#{name}'.", ex)
+            end
+          else
+            raise RakeTaskError.new("Migration up() called without a block argument.  You must pass a block to migrate up()")
+          end
         end
-=end
+      end
     end
 
-    def down
-      puts "Calling down!"
+    def down(&block)
+      Rake.migration_manager do |mgr, db|
+        if mgr.migrating_down?
+          if block_given?
+            begin
+                if block.parameters.length == 0
+                  # block is not receiving the DB argument.  So, expect a SQL string
+                  # to be returned that we will run
+                  sql = yield db
+                  db.run sql
+                else
+                  yield db
+                end
+                mgr.record_success(self)
+            rescue => ex
+                mgr.record_failure(self)
+                raise RakeTaskError.new("Failed to reverse migration '#{name}'.", ex)
+            end
+          else
+            raise RakeTaskError.new("Migration down() called without a block argument.  You must pass a block to migrate down()")
+          end
+        end
+      end
     end
 
     def execute(args=nil)
@@ -275,6 +312,7 @@ module Rake
       Rake.application.task_in_progress = self
       if (@isa_migration)
         Rake.application.init_migration_manager
+        super
       else
         super
       end

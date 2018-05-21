@@ -1,3 +1,5 @@
+require 'etc'
+
 module Rake
 
   def self.verbose?
@@ -18,6 +20,10 @@ module Rake
 
     def migration_manager(&block)
       Rake.application.migration_manager(&block)
+    end
+
+    def whoami
+        Etc.getpwuid(Process.uid).name
     end
   end
 

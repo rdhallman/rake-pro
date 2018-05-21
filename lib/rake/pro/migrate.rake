@@ -1,3 +1,8 @@
+desc "Reverse the specifed migration; ie. invoke the down migration block"
+task :reverse do
+  Rake.application.reverse = true
+end
+  
 desc "Migrate up to latest migration"
 task :migrate do
   begin
@@ -47,31 +52,57 @@ namespace :migrate do
 #task  |  Description  | Status  | Time  | Author? |  Deployer
 # m0
 
-    desc "Create initial migration table"
-    task :init do
+    desc "Insert some fake records"
+    task :insert do
       sequel(Rake.context[:migrations][:user]) do |db|
-        db.create_table(Rake.context[:migrations][:table]) do
-          primary_key :id
-          Time :applied_at
-          String :name
-          String :description
-          String :action
-          String :status
-          String :output
-          String :author
-          String :dbuser
-          String :prereqs
-          String :dependents
-        end
+        db.loggers << Logger.new($stdout)
+        db.run "INSERT INTO public.testmitbl VALUES ('abc', '#{Time.now}', 'some desc', 'applied', 'max', '123')"
       end
     end
 
-    desc "List migrations that have already been performed"
-    task :list do
-      Rake.migration_manager do |mgr, db|
-        mgr.migration_history.each do |row, index|
-          puts "#{row.inspect}"
+end
+
+desc "List all migrations that have been committed to the target environment"
+task :migrations do
+  Rake.migration_manager do |mgr, db|
+    keys = db[mgr.migrations].columns.map { |key| key.to_s }
+    keys = [:id, :commit_time, :name, :action, :status]
+    puts "#{keys.map { |key| key.to_s }.join("\t")}"
+    mgr.migration_history.each do |row, index|
+      puts "#{row[:id]}\t#{row[:commit_time]}\t#{row[:name]}\t#{row[:action]}\t#{row[:status]}"
+      #puts row.inspect
+=begin
+      line = ""
+      keys.each do |key|
+        if index == 0
+          #keys = row.keys
+          keys = mgr.migrations.columns
+          puts keys.join("\t\t")
         end
+
+        
+        line << row[key] + "\t"
+      end
+      puts line
+=end
+    end
+  end
+end
+
+
+namespace :migrations do
+
+    desc "Create initial migration table"
+    task :setup do
+      Rake.migration_manager do |mgr|
+        mgr.setup
+      end
+    end
+
+    desc "Drop the migrations table - destructive action"
+    task :teardown do
+      Rake.migration_manager do |mgr|
+        mgr.teardown
       end
     end
 

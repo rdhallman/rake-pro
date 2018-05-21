@@ -1,12 +1,5 @@
-require 'yaml'
 require 'erb'
 require 'json/minify'
-require 'sequel'
-require 'uri'
-
-def context
-  Rake.application.context.values
-end
 
 module Rake
 
@@ -26,7 +19,7 @@ module Rake
         end
 
         def job
-            Rake.application.context.values
+            Rake.context
         end
         
         def expand template
@@ -65,7 +58,7 @@ module Rake
             raise "You must either pass a sql file or sql string."
         end
 
-        login = context[:users][user.to_sym]
+        login = Rake.context[:users][user.to_sym]
         ctx = ScriptContext.new(login, flags)
         expScript = ctx.expand(script)
         scriptFile = File.join('/tmp/', 'tmp-psql-script.sql')
@@ -76,7 +69,7 @@ module Rake
             ctx.host = host
             ctx.port = port
 
-            cmdLine = Rake.application.context.values['command-lines'][cmdline]
+            cmdLine = Rake.context['command-lines'][cmdline]
             exCmdLine = ctx.expand(cmdLine)
 
             if Rake.application.disconnected
@@ -85,6 +78,9 @@ module Rake
                 puts "  $ #{exCmdLine}"
                 puts "    ------------------------------------------------------------- "
                 contents = IO.read(scriptFile)
+
+                puts contents
+=begin
                 contents.each_line {|line| 
                     if (line.length() > 90)
                         puts "    | %s..." % line[0..90]
@@ -92,10 +88,11 @@ module Rake
                         puts "    | " + line
                     end
                 }
+=end
                 puts "    -------- END of FILE ------------------------------------------ "
 
             else
-                local.sh %Q[PGPASSWORD=\"#{login[:password]}\" psql -a -h #{host} -U #{login[:username]} -d #{context[:database]} -p #{port} -f #{scriptFile}]
+                local.sh exCmdLine
             end
         end
     rescue => ex
@@ -106,29 +103,12 @@ module Rake
             errmsg = "Failed to export or execute SQL block passed as argument"
         end
         raise RakeTaskError.new(errmsg, ex)
-
-    #    puts "\n!!! PSQL Error:\n => #{errmsg}: \n => #{$!}"
-    #    puts "Backtrace:\n\t#{ex.backtrace.join("\n\t")}"
     end
 
-end
-
-def sequel(user = :me)
-    raise "You must pass a block for this function to yield to" unless block_given?
-    login = context[:users][user.to_sym]
-    Rake::SSH.tunnel do |local, host, port|
-        db =  if host.include?("redshift")
-                Sequel.connect("postgres://#{login[:username]}:#{URI.escape(login[:password])}@#{host}:#{port}/#{context[:database]}", {client_min_messages: false, force_standard_strings: false})
-            else
-                Sequel.postgres(host: host, port: port, user: login[:username], password: login[:password], database: context[:database])
-            end
-        yield db
-        db.disconnect
-    end
 end
 
 def method_missing(m, *args, &block)  
-    if Rake.application.executing_task && Rake.application.context.values.has_key?('command-lines') && Rake.application.context.values['command-lines'].has_key?(m)
+    if Rake.application.executing_task && Rake.context.has_key?('command-lines') && Rake.context['command-lines'].has_key?(m)
         Rake.application.executing_task = false
         Rake.run_erb_script(m, *args, &block)
         Rake.application.executing_task = true

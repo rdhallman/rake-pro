@@ -17,6 +17,7 @@ module Rake
     attr_accessor :disconnected
     attr_accessor :reverse
     attr_accessor :executing_task
+    attr_accessor :task_in_progress
 
     class Context
       def initialize
@@ -104,6 +105,7 @@ module Rake
         task_name = task_details[0]
         parts = task_name.split(':')
         push_scope(parts[0].to_sym) if parts.length == 1
+        ARGV.shift
 
         load_paths = [*0..parts.length-1].reduce([
             rpath(root, 'cfg.yml'),
@@ -175,6 +177,7 @@ module Rake
     end
 
     def invoke_task *args
+      Rake::TaskManager.record_task_metadata = true
       task_name, pruned = (Rake.application.context ||= context_factory).before_invoke(parse_task_string args.first)
       if Rake::Task.task_defined?(task_name) || !pruned
         Rake.application.active_task = task_name
@@ -281,7 +284,6 @@ module Rake
       puts "Backtrace:\n\t#{ex.backtrace.join("\n\t")}" if Rake.verbose?
     end
 
-
     def invoke_with_call_chain(task_args, invocation_chain) # :nodoc:
       Rake.application.active_task = name
       new_chain = InvocationChain.append(self, invocation_chain)
@@ -325,3 +327,4 @@ def require_tasks rakefile
   end
   load rakepaths.first
 end
+

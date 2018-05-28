@@ -31,6 +31,21 @@ module Rake
         @migration_history
       end
 
+      def latest_migrations
+        ml = migration_history.reduce({}) { |acc, mig|
+          key = mig.name.to_sym
+          if acc.has_key?(key)
+            acc[key] = [mig]
+          else
+            acc[key] += mig
+        }
+        ml.each { |key, value|
+          ml[key] = value.sort_by { |item|
+            item.id
+          }
+        }
+      end
+
       def migrations
         @mdb[Rake.context[:migrations][:table].to_sym]
       end
@@ -43,17 +58,22 @@ module Rake
         @mdb.create_table(Rake.context[:migrations][:table]) do
             primary_key :id
             Time :commit_time
-            String :name
-            String :action
-            String :status
-            String :whoami
-            String :dbuser
-            String :console
+            String :scopes, size: 128
+            String :name, size: 64
+            String :action, size: 32
+            String :status, size: 32
+            String :whoami, size: 64
+            String :dbuser, size: 64
+            String :console, text: true
         end
       end
 
       def teardown
         @mdb.drop_table(Rake.context[:migrations][:table].to_sym);
+      end
+
+      def pack  #compress, comsolidate, rehash, squash, purge_history, compact, defrag
+        # remove history, only showing the latest status for each migration
       end
 
       def action?
@@ -63,6 +83,7 @@ module Rake
       def record_success(migration)
         migrations.insert(
             commit_time: Time.now,
+            scopes: scopes_applied(migration),
             name: migration.name,
             action: action?,
             status: "SUCCEEDED",
@@ -77,6 +98,7 @@ module Rake
       def record_failure(migration)
         migrations.insert(
             commit_time: Time.now,
+            scopes: scopes_applied(migration),
             name: migration.name,
             action: action?,
             status: "FAILED",
@@ -92,12 +114,32 @@ module Rake
         @mdb.disconnect if @migration_manager_initialized
       end
 
+      def scopes_applied(migration)
+        exclusions = [ :reverse ]
+        exclusions += migration.name.split(':').map { |scope| scope.to_sym }
+        Rake.application.context.active_scopes.map { |scope|
+          scope.to_sym
+        }.select { |scope|
+          !exclusions.include?(scope)
+        }.map { |scope| 
+          scope.to_s
+        }.join(', ')
+      end
+
       def migrating_up?
         Rake.application.reverse.nil? || Rake.application.reverse == false
       end
 
+      # is the specified migration required but still pending in the
+      # current migration action
+      def apply_pending?(migration)
+      end
+
       def migrating_down?
         !migrating_up?
+      end
+
+      def reverse_pending?(migration)
       end
 
     end

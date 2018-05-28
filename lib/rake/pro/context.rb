@@ -246,10 +246,6 @@ module Rake
     class AbortNormally < Exception
     end
 
-    def flag_as_migration
-      @isa_migration = true
-    end
-
     def invoke_prerequisites(task_args, invocation_chain)
       (Rake.application.dependent_tasks ||= []).push(@name)
       super
@@ -310,12 +306,7 @@ module Rake
       Rake.application.current_task = @name  
       Rake.application.executing_task = true
       Rake.application.task_in_progress = self
-      if (@isa_migration)
-        Rake.application.init_migration_manager
         super
-      else
-        super
-      end
       Rake.application.executing_task = false
     rescue => ex
       puts "Error:\n => #{ex.message}"

@@ -1,0 +1,16 @@
+###########################################################################
+# Vault
+
+command-lines:
+    psql: "PGPASSWORD=\"#{login[:password]}\" psql -a -h #{host} -U #{login[:username]} -d #{job[:database]} -p #{port} -f #{filepath}"
+    mysql: "mysql -v -v -v -h #{host} --port=#{port} -u #{login[:username]} --password='#{login[:password]}' --database='#{job[:database]}' < #{filepath}"
+
+dev:
+    adapter: mysql2
+    database: "shazam"
+    host: "localhost"
+    port: 3306
+
+migrations:
+    user: me
+    table: migrations

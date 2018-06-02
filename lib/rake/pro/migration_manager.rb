@@ -31,6 +31,7 @@ module Rake
         @migration_history
       end
 
+=begin
       def latest_migrations
         ml = migration_history.reduce({}) { |acc, mig|
           key = mig.name.to_sym
@@ -45,6 +46,7 @@ module Rake
           }
         }
       end
+=end
 
       def migrations
         @mdb[Rake.context[:migrations][:table].to_sym]

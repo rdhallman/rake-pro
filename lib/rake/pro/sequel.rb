@@ -19,7 +19,7 @@ end
 def sequel(user = :me)
     raise "You must pass a block for this function to yield to" unless block_given?
     Rake::SSH.tunnel do |local, host, port|
-        db =  sequel_connect(host, port, user)
+        db, login =  sequel_connect(host, port, user)
         yield db
         db.disconnect
     end

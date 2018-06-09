@@ -35,6 +35,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "hashie", "~> 3.5"
   spec.add_dependency "pg", "~> 1.0"
   spec.add_dependency "sequel", "~> 5.6"
+  spec.add_dependency "mysql2"
   spec.add_dependency "json", "~> 2.1"
   spec.add_dependency "json-minify", "~> 0.0"
   spec.add_dependency "awesome_print", "~> 1.8"

@@ -64,7 +64,10 @@ module Rake
             String :name, size: 64
             String :action, size: 32
             String :status, size: 32
-            String :whoami, size: 64
+            String :author, size: 64
+            Time :created
+            Time :modified
+            String :executor, size: 64
             String :dbuser, size: 64
             String :console, text: true
         end
@@ -89,7 +92,10 @@ module Rake
             name: migration.name,
             action: action?,
             status: "SUCCEEDED",
-            whoami: Rake.whoami,
+            author: migration.author,
+            created: migration.created,
+            modified: migration.modified,
+            executor: Rake.whoami,
             dbuser:  @dbuser,
             console: @console.string
         )
@@ -104,7 +110,10 @@ module Rake
             name: migration.name,
             action: action?,
             status: "FAILED",
-            whoami: Rake.whoami,
+            author: migration.author,
+            created: migration.created,
+            modified: migration.modified,
+            executor: Rake.whoami,
             dbuser: @dbuser,
             console: @console.string
         )

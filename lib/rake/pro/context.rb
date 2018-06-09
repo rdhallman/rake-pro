@@ -243,6 +243,10 @@ module Rake
   end
 
   module TaskOverrides
+    attr_reader :author
+    attr_reader :created
+    attr_reader :modified
+
     class AbortNormally < Exception
     end
 

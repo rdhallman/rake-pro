@@ -243,11 +243,11 @@ module Rake
   end
 
   module TaskOverrides
-    attr_reader :author
-    attr_reader :created
-    attr_reader :modified
-
     class AbortNormally < Exception
+    end
+
+    def flag_as_migration
+      @isa_migration = true
     end
 
     def invoke_prerequisites(task_args, invocation_chain)
@@ -258,7 +258,7 @@ module Rake
 
     def up(&block)
       Rake.migration_manager do |mgr, db|
-        if mgr.migrating_up? && mgr.apply_pending?(self)
+        if mgr.migrating_up?
           if block_given?
             begin
                 if block.parameters.length == 0
@@ -283,7 +283,7 @@ module Rake
 
     def down(&block)
       Rake.migration_manager do |mgr, db|
-        if mgr.migrating_down? && mgr.reverse_pending?(self)
+        if mgr.migrating_down?
           if block_given?
             begin
                 if block.parameters.length == 0
@@ -310,7 +310,12 @@ module Rake
       Rake.application.current_task = @name  
       Rake.application.executing_task = true
       Rake.application.task_in_progress = self
-      super
+      if (@isa_migration)
+        Rake.application.init_migration_manager
+        super
+      else
+        super
+      end
       Rake.application.executing_task = false
     rescue => ex
       puts "Error:\n => #{ex.message}"

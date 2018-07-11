@@ -1,6 +1,6 @@
 GIT
   remote: https://github.com/dhallman/rake-pro
-  revision: a601a0726394e4365151f21c5f07a425995128ec
+  revision: bdbb038c0799001bbcbdfa4a760fa6f50a46822d
   branch: master
   specs:
     rake-pro (0.1.4)
@@ -43,4 +43,4 @@ DEPENDENCIES
   rake-pro!
 
 BUNDLED WITH
-   1.15.4
+   1.16.2

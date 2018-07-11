@@ -1,3 +1,34 @@
+task :list do
+  puts "arg == " + ARGV.inspect
+  #puts "options == " + Rake.application.options
+  #ARGV = ["-T"]
+  Rake.application.run(["-T"])
+  #Rake.application.handle_options(["-T"])
+  #Rake.application.top_level
+  #Rake.application.options.show_all_tasks = true
+  #Rake.application.options.show_tasks = :tasks
+  #Rake.application.options.show_task_pattern = /.*/
+  #Rake.application.display_tasks_and_comments
+  raise SystemExit
+end
+
+task :tasks do
+  Rake.application.run(["-T"])
+  raise SystemExit
+end
+
+task :t do
+  Rake.application.run(["-T"])
+  raise SystemExit
+end
+
+task :m do
+  Rake.application.options.show_tasks = :migrations
+  Rake.application.run(["-M"])
+  raise SystemExit
+end
+  
+  
 desc "Reverse the specifed migration; ie. invoke the down migration block"
 task :reverse do
   Rake.application.reverse = true
@@ -5,29 +36,83 @@ end
   
 desc "Migrate up to latest migration"
 task :migrate do
-  begin
-    puts "Migrating to latest"
-    ns = "#{File.basename(Rake.application.active_dir)}"
-    load "#{Rake.application.active_dir}/migrations.rake"
-    Rake::MigrationManager.instance.migrate_to_latest
-    Rake::Task["#{ns}:latest"].invoke
-  ensure
-    Rake::MigrationManager.instance.destroy
-  end
+  Rake::Task["migrate:up"].invoke
 end
   
+
+def invoke_if_defined
+
+end
 
 namespace :migrate do
 
     desc "Migrate up to latest migration"
-    task :up do
+    task :up, [:count] do |t, args|
       begin
-        ns = "#{File.basename(Rake.application.active_dir)}"
-        #namespace ns do
+        if args.has_key?(:count)
+          count = args[:count]
+        else
+          count = 0
+        end
+
+        if ARGV.length > 0
+          arg = ARGV.shift
+
+          if Rake::Task.task_defined?(arg)
+            puts "!!!!!! task #{arg} is defined!!!!!"
+            Rake::Task[arg].invoke
+          elsif Rake::Task.task_defined?("#{arg}:latest")
+            puts "!!!!!! task #{arg} ::: latest is defined!!!!!"
+            Rake::Task["#{arg}:latest"].invoke
+          end
+        end
+
+
+
+=begin
+        ns = Rake.application.context.path_namespace
+        if ns.nil?
+          exit_needed = ARGV.length > 0
+          ns = ARGV.shift if exit_needed
+        end
+
+        puts "--=  #{Rake.application.top_level_tasks}"
+        puts "--=  #{Rake::Task.tasks}"
+        puts "--=  #{Rake::Task.tasks[5].sources}"
+        puts "--=  #{Rake::Task['latest'].sources}"
+
+
+        if Rake::Task.task_defined?('latest')
+          mig_target = 'latest'
+        elsif Rake::Target.task_defined?("#{ns}:latest")
+          mig_target = '#{ns}:latest'
+        end
+
+        puts "--=  #{Rake::Task.task_defined?('latest')}"
+
+        #raise SystemExit if exit_needed
+=end
+
+=begin
+        Rake::MigrationManager.instance.set_mode(:up, args[:count], ARGV.shift)
+        ns = Rake.application.context.path_namespace
+        load "#{Rake.application.active_dir}/migrations.rake" if File.exists?
+        if ns.nil?
+          mfile = "#{Rake.application.active_dir}/migrations.rake"
+          load mfile if File.file?(mfile)
+          load "#{Rake.application.active_dir}/migrations.rake" if File.file?
+          Rake::Task["latest"].invoke
+        else
           load "#{Rake.application.active_dir}/migrations.rake"
-        #end
-        Rake::MigrationManager.instance.migrate_up()
-        Rake::Task["#{ns}:latest"].invoke
+          Rake::Task["#{ns}:latest"].invoke
+        end
+        if Rake::Task.task_defined?(mig_target)
+          Rake::Task[mig_target].invoke
+        else
+          raise "Migration target not found."
+        end
+=end
+
       ensure
         Rake::MigrationManager.instance.destroy()
       end
@@ -41,7 +126,7 @@ namespace :migrate do
         #namespace ns do
           load "#{Rake.application.active_dir}/migrations.rake"
         #end
-        Rake::MigrationManager.instance.migrate_down
+        Rake::MigrationManager.instance.set_mode(:down)
         Rake::Task["#{ns}:latest"].invoke(0)
       ensure
         Rake::MigrationManager.instance.destroy
@@ -111,6 +196,15 @@ namespace :migrations do
       sequel(Rake.context[:migrations][:user]) do |db|
         db.loggers << Logger.new($stdout)
         db.run "INSERT INTO public.testmitbl VALUES ('abc', '#{Time.now}', 'some desc', 'applied', 'max', '123')"
+      end
+    end
+
+    desc "Show latest migrations applied"
+    task :latest do
+      Rake.migration_manager do |mgr, db|
+        mgr.latest_migrations.each do |name, history|
+          #puts "Name:  #{name}    HISTORY:  #{history.inspect}"
+        end
       end
     end
 

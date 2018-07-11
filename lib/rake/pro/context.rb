@@ -21,10 +21,11 @@ module Rake
 
     class Context
       def initialize
-        @cfg_files = []
+        @kvp_files = @rake_files = []
         @kvp_stack = []
         @active_scopes = []
         @kvp = KeyStore.new
+        @scope_depth = 0
       end
 
       def [](key)
@@ -53,6 +54,10 @@ module Rake
         @active_scopes
       end
 
+      def scope_depth
+        @scope_depth
+      end
+
       def push_scope scope
         puts "Promoting scope '#{scope}'." if Rake.verbose?
         @active_scopes.push(scope)
@@ -62,10 +67,10 @@ module Rake
         @active_scopes.pop
       end
 
-      def push_cfg cfg_file
-        puts "Loading configuration file: #{cfg_file}" if Rake.verbose?
-        cfg = KeyStore.load(cfg_file)
-        source = if (cfg.has_key?(:default))
+      def push_kvp kvp_file
+        puts "Loading configuration file: #{kvp_file}" if Rake.verbose?
+        kvp = KeyStore.load(kvp_file)
+        source = if (kvp.has_key?(:default))
                     cfg[:default]
                   elsif (cfg.has_key?(:source))
                     cfg[:source]
@@ -79,17 +84,35 @@ module Rake
         @kvp_stack.push(cfg)
       end
 
-      def pop_cfg
+      def pop_kvp
         @kvp_stack.pop
       end
 
-      def load_once(cfg_file)
-        unless @cfg_files.include?(cfg_file)
-          if (File.file?(cfg_file))
-            Rake.application.active_dir = File.dirname(cfg_file)
-            push_cfg(cfg_file)
+      def path_namespace
+        ns = File.basename(Rake.application.active_dir)
+        File.basename(root) == ns ? nil : ns
+      end
+
+      def load_kvpfile_once(kvp_file)
+        unless @kvp_files.include?(kvp_file)
+          if (File.file?(kvp_file))
+            # Rake.application.active_dir = File.dirname(kvp_file)
+            #  loading rakefiles will set active dir more accurately
+            push_kvp(kvp_file)
           end
-          @cfg_files.push(cfg_file)
+          @kvp_files.push(kvp_file)
+        end
+      end
+
+      def load_rakefile_once(rake_file, depth)
+        unless @rake_files.include?(rake_file)
+          if (File.file?(rake_file))
+            Rake.application.active_dir = File.dirname(rake_file)
+            fullpath = File.expand_path(rake_file, root)
+            @scope_depth = depth
+            Rake.load_rakefile(fullpath)
+          end
+          @rake_files.push(rake_file)
         end
       end
 
@@ -101,33 +124,45 @@ module Rake
         siblings
       end
           
-      def before_invoke task_details
-        task_name = task_details[0]
-        parts = task_name.split(':')
+      private def kvp_files(paths)
+        [
+          rpath(*paths, 'cfg.yml'),
+          rpath(*paths, '.cfg.yml'),
+          rpath(*paths, 'cfg-private.yml'),
+          rpath(*paths, '.cfg-private.yml'),
+          rpath(*paths, 'cfg-local.yml'),
+          rpath(*paths, '.cfg-local.yml')
+        ]
+      end
+
+      private def rake_files(paths, depth)
+        [
+          { path: rpath(*paths, 'tasks.rake'), depth: depth },
+          { path: rpath(*paths, 'migrations.rake'), depth: depth }
+        ]
+      end
+
+
+      def before_invoke task_name, task_args
+        parts = task_name.split('/')
         push_scope(parts[0].to_sym) if parts.length == 1
         ARGV.shift
 
-        load_paths = [*0..parts.length-1].reduce([
-            rpath(root, 'cfg.yml'),
-            rpath(root, '.cfg.yml'),
-            rpath(root, 'cfg-private.yml'),
-            rpath(root, '.cfg-private.yml'),
-            rpath(root, 'cfg-local.yml'),
-            rpath(root, '.cfg-local.yml')
-          ]) { |paths, index|
+        task_name = parts.last
+
+        load_paths = [*0..parts.length-1].reduce(
+          kvps: kvp_files([root]),
+          rakes: rake_files([root], 0)
+        ) { |paths, index|
             folder = File.join(parts[0..index])
-            paths.push(rpath(root, folder, 'cfg.yml'))
-            paths.push(rpath(root, folder, '.cfg.yml'))
-            paths.push(rpath(root, folder, 'cfg-private.yml'))
-            paths.push(rpath(root, folder, '.cfg-private.yml'))
-            paths.push(rpath(root, folder, 'cfg-local.yml'))
-            paths.push(rpath(root, folder, '.cfg-local.yml'))
+            paths[:kvps] += kvp_files([root] + parts[0..index])
+            paths[:rakes] += rake_files([root] + parts[0..index], index+1)
             paths
         }
-        load_paths.push(rpath(home, '.cyborg.yml'))
+        load_paths[:kvps].push(rpath(home, '.cyborg.yml'))
 
-        load_paths.each { |path|
-          load_once(path)
+        load_paths[:kvps].each { |path|
+          load_kvpfile_once(path)
         }
 
         # promote and prune the key space
@@ -149,6 +184,11 @@ module Rake
           acc.recursive_merge(kvp)
         }
 
+        # Load rakefiles along the path
+        load_paths[:rakes].each { |rake|
+          load_rakefile_once(rake[:path], rake[:depth])
+        }
+
         [task_name, promoted]
       end
 
@@ -157,7 +197,7 @@ module Rake
         parts = task_name.split(':')
         if parts.length > 1
           pop_scope
-          pop_cfg
+          pop_kvp
         end
       end
 
@@ -169,8 +209,10 @@ module Rake
     end
 
   end
+end
 
 
+module Rake
   module ApplicationOverrides
 
     def context_factory
@@ -179,21 +221,65 @@ module Rake
 
     def invoke_task *args
       Rake::TaskManager.record_task_metadata = true
-      task_name, pruned = (Rake.application.context ||= context_factory).before_invoke(parse_task_string args.first)
+      task_name, task_args = parse_task_string *args
+      task_name, pruned = (Rake.application.context ||= context_factory).before_invoke(task_name, task_args)
       if Rake::Task.task_defined?(task_name) || !pruned
         Rake.application.active_task = task_name
-        super
+        if task_args.length > 0
+          task_details = "#{task_name}[#{task_args}.join(', ')]"
+        else
+          task_details = task_name
+        end
+        super(task_details)
       end
       Rake.application.context.after_invoke(parse_task_string args.first)
     end
 
+    def standard_rake_options # :nodoc:
+      stdopts = super
+      stdopts << ["--migrations", "-M [PATTERN]",
+            "Display the migrations (matching optional PATTERN) " +
+            "with descriptions, then exit. " +
+            "-AM combination displays all of migrations contained no description.",
+            lambda { |value|
+              select_tasks_to_show(options, :migrations, value)
+            }
+      ]
+      sort_options(stdopts)
+    end
+
     # Display the tasks and comments.
     def display_tasks_and_comments # :nodoc:
+      puts "DIsplaying tasks"
       displayable_tasks = tasks.select { |t|
         (options.show_all_tasks || t.comment) &&
           t.name =~ options.show_task_pattern
       }
       case options.show_tasks
+      when :migrations
+        width = displayable_tasks.map { |t| t.name_with_args.length }.max || 10
+        if truncate_output?
+          max_column = terminal_width - name.size - width - 7
+        else
+          max_column = nil
+        end
+
+        displayable_tasks.each do |t|
+          next if !t.isa_migration?
+          #puts t.name_with_args
+          if top_level_tasks.length == 1 && top_level_tasks.first == 'default'
+            match = true
+          else
+            match = false
+            top_level_tasks.each { |ns| 
+              match = t.name.start_with?("#{ns}:")
+            }
+          end
+          next if !match
+          printf("#{name} %-#{width}s  # %s\n",
+            t.name_with_args,
+            max_column ? truncate(t.comment, max_column) : t.comment)
+        end
       when :tasks
         width = displayable_tasks.map { |t| t.name_with_args.length }.max || 10
         if truncate_output?
@@ -203,6 +289,7 @@ module Rake
         end
 
         displayable_tasks.each do |t|
+          next if t.isa_migration?
           if top_level_tasks.length == 1 && top_level_tasks.first == 'default'
             match = true
           else
@@ -241,13 +328,27 @@ module Rake
       finalize_migrations
     end
   end
+end
 
+Rake::Application.class_eval do
+  prepend(Rake::ApplicationOverrides)
+end
+
+module Rake
   module TaskOverrides
+    attr_reader :author
+    attr_reader :created
+    attr_reader :revision
+
     class AbortNormally < Exception
     end
 
     def flag_as_migration
       @isa_migration = true
+    end
+
+    def isa_migration?
+      return @isa_migration
     end
 
     def invoke_prerequisites(task_args, invocation_chain)
@@ -256,9 +357,24 @@ module Rake
       Rake.application.dependent_tasks.pop
     end
 
+    # Enhance a task with prerequisites or actions.  Returns self.
+    def enhance(deps=nil, &block)
+      scope_depth = Rake.application.context.scope_depth || 0
+      nt = super
+      actions = nt.instance_variable_get("@actions")
+      @action_depths ||= {}
+      if @action_depths.has_key?(scope_depth)
+        @action_depths[scope_depth] << actions.last
+      else
+        @action_depths[scope_depth] = [actions.last]
+      end
+      nt
+    end
+
     def up(&block)
       Rake.migration_manager do |mgr, db|
-        if mgr.migrating_up?
+        #if mgr.migrating_up? && mgr.apply_pending?(self)
+        if mgr.migrate_up_pending?(self)
           if block_given?
             begin
                 if block.parameters.length == 0
@@ -283,7 +399,8 @@ module Rake
 
     def down(&block)
       Rake.migration_manager do |mgr, db|
-        if mgr.migrating_down?
+        #if mgr.migrating_down? && mgr.reverse_pending?(self)
+        if mgr.migrate_down_pending?(self)
           if block_given?
             begin
                 if block.parameters.length == 0
@@ -306,15 +423,31 @@ module Rake
       end
     end
 
+    def execute_actions(args=nil)
+      args ||= EMPTY_TASK_ARGS
+      if application.options.dryrun
+        application.trace "** Execute (dry run) #{name}"
+        return
+      end
+      application.trace "** Execute #{name}" if application.options.trace
+      application.enhance_with_matching_rule(name) if @actions.empty?
+      if @current_action.nil? 
+        @current_action ||= Rake.application.context.scope_depth
+      else
+        @current_action -= 1
+      end
+      @action_depths[@current_action].each { |act| act.call(self, args) }
+    end
+
     def execute(args=nil)
       Rake.application.current_task = @name  
       Rake.application.executing_task = true
       Rake.application.task_in_progress = self
       if (@isa_migration)
         Rake.application.init_migration_manager
-        super
+        execute_actions(args)
       else
-        super
+        execute_actions(args)
       end
       Rake.application.executing_task = false
     rescue => ex
@@ -349,12 +482,11 @@ module Rake
   end
 end
 
-Rake::Application.class_eval do
-  prepend Rake::ApplicationOverrides
-end
+#Rake::Application.singleton_class.prepend(Rake::ApplicationOverrides)
+
 
 Rake::Task.class_eval do
-  prepend Rake::TaskOverrides
+  prepend(Rake::TaskOverrides)
 end
 
 def require_tasks rakefile

@@ -17,10 +17,9 @@ desc "Latest migration"
 task :latest => [:add_middle_name_zip]
 
 desc "Add state and zip columns to Persons table"
-#author :rdhallman, created: "5-10-2018"
-task :add_middle_name_zip => :add_state_and_zip do |m|
-  puts "Starting migration task..."
-  m.up do
+author :rdhallman, created: "5-10-2018", updated: "5-13-2018"
+migration :add_middle_name_zip => :add_state_and_zip do |m|
+  m.up do |db|
       <<~SQL
           ALTER TABLE Persons 
               ADD MiddleName VARCHAR(64),
@@ -28,24 +27,24 @@ task :add_middle_name_zip => :add_state_and_zip do |m|
       SQL
   end
   m.down do
-      <<~SQL
-          ALTER TABLE Persons 
-              DROP COLUMN MiddleName,
-              DROP COLUMN NameSuffix;
-      SQL
+        <<~SQL
+            ALTER TABLE Persons 
+                DROP COLUMN MiddleName,
+                DROP COLUMN NameSuffix;
+        SQL
   end
 end
 
 desc "Add state and zip columns to Persons table"
-task :add_state_and_zip => :create_user_table do |migrate|
-  migrate.up do
+migration :add_state_and_zip => :create_user_table do |m|
+  m.up do
       <<~SQL
           ALTER TABLE Persons 
               ADD State VARCHAR(64),
               ADD Zip VARCHAR(32);
       SQL
   end
-  migrate.down do
+  m.down do
       <<~SQL
           ALTER TABLE Persons 
               DROP COLUMN State,
@@ -55,8 +54,8 @@ task :add_state_and_zip => :create_user_table do |migrate|
 end
 
 desc "Create the user table"
-task :create_user_table do |migrate|
-  migrate.up do
+migration :create_user_table do |m|
+  m.up do
       <<~SQL
           CREATE TABLE Persons (
               PersonID int,
@@ -67,7 +66,7 @@ task :create_user_table do |migrate|
           );
       SQL
   end
-  migrate.down do
+  m.down do
       "DROP TABLE Persons;"
   end
 end

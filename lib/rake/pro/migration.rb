@@ -78,10 +78,11 @@ module Rake
             init()
         end
 
-        def migrate_down(count = 1)
-            @direction = :down
-            Rake.application.reverse = true
-            init
+        def set_mode(direction, count = 0)
+            @direction = direction
+            @count = count
+            Rake.application.reverse = direction == :down
+            init()
         end
 
         def direction

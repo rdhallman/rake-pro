@@ -8,6 +8,11 @@ module Rake::Pro
         task.flag_as_migration
         task
       end
+
+      def author(name, opts)
+        #puts "author called with:  #{name}"
+        #puts "... opts == #{opts.inspect}"
+      end
   
     end
   end

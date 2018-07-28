@@ -71,17 +71,17 @@ module Rake
         puts "Loading configuration file: #{kvp_file}" if Rake.verbose?
         kvp = KeyStore.load(kvp_file)
         source = if (kvp.has_key?(:default))
-                    cfg[:default]
-                  elsif (cfg.has_key?(:source))
-                    cfg[:source]
-                  elsif (cfg.has_key?(:system))
-                    cfg[:system]
-                  elsif(cfg.has_key?(:target))
-                    cfg[:target]
+                    kvp[:default]
+                  elsif (kvp.has_key?(:source))
+                    kvp[:source]
+                  elsif (kvp.has_key?(:system))
+                    kvp[:system]
+                  elsif(kvp.has_key?(:target))
+                    kvp[:target]
                   end
 
         push_scope(source.to_sym) if source
-        @kvp_stack.push(cfg)
+        @kvp_stack.push(kvp)
       end
 
       def pop_kvp
